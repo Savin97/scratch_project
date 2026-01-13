@@ -23,6 +23,12 @@ df.sort_values("ticker")
 df = df.set_index("date")
 df = df.reset_index()
 
-df = df.groupby("ticker")
+df = df.groupby("ticker").agg(
+    sharpe = ("price", lambda x: x.mean()/x.std()),
+    return_std=("price", "std"),
+    volume_sum=("price", "sum"),
 
+    )
+df.to_csv("output.csv", index=False)
 print(df)
+
