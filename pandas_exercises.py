@@ -10,25 +10,59 @@ data = {
 }
 df = pd.DataFrame(data)
 
-price = df[df["ticker"] == "AAPL"]
-
 
 df["price_change"] = df["price"].diff()
 
 df["log_return"] = np.log(df["price"] / df["price"].shift(1))
 # print(df["log_return"])
-df.sort_values("date")
-df.sort_values("ticker")
+# print(df.head())
+
+df = df.sort_values(["ticker", "date"])
+
 
 df = df.set_index("date")
 df = df.reset_index()
 
-df = df.groupby("ticker").agg(
-    sharpe = ("price", lambda x: x.mean()/x.std()),
-    return_std=("price", "std"),
-    volume_sum=("price", "sum"),
+df["mean_price"] = (
+    df.groupby("ticker")["price"].transform("mean")
+)
 
-    )
-df.to_csv("output.csv", index=False)
+df = df.groupby(["ticker"]).filter(lambda x: len(x)>1)
+
+df["ret"] = df.groupby("ticker")["price"].pct_change()
+
+df["vol_20"] = (
+    df.groupby("ticker")["ret"].rolling(20).std().reset_index(level=0,drop=True)
+)
+
+# print(df.head())
+
+
+##
+df = pd.DataFrame({
+    "ticker": ["AAPL", "AAPL", "AAPL", "MSFT", "MSFT"],
+    "date": pd.to_datetime([
+        "2024-01-01",
+        "2024-01-02",
+        "2024-01-03",
+        "2024-01-01",
+        "2024-01-02",
+    ]),
+    "price": [100, 102, 104, 200, 210]
+})
+
+df["feature"] = (df.sort_values(["ticker", "date"])
+                 .groupby("ticker")["price"]
+                 .mean()
+                 .reset_index(level=0, drop= True)
+)
 print(df)
 
+
+s = (
+    df.groupby("ticker")["price"]
+      .rolling(2)
+      .mean().reset_index(level=0)
+)
+
+print(s)
