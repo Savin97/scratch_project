@@ -16,6 +16,13 @@ df = pd.DataFrame({
     "volume": np.random.randint(1_000, 20_000, size=len(dates) * len(tickers))
 })
 
+df_for_merging = pd.DataFrame({
+    "earnings_date": np.repeat(pd.date_range("2024-02-01", periods=40, freq="D"), len(tickers)),
+    "ticker": tickers * len(dates),
+    "EPS": np.random.uniform( 10,90, size = len(dates) * len(tickers)).round(2) 
+})
+#df_for_merging = df_for_merging.sort_values(["ticker","earnings_date"])
+
 df["market"] = ["US"] * len(df)
 df["dollar_volume"] = (df["price"] * df["volume"]).round(2)
 
@@ -33,11 +40,8 @@ df2 = df[ ["date", "ticker"] ].copy()
 #df["return"] = df["price"].pct_change() # Wrong for multiple tickers
 
 df["price_diff"] = df.groupby("ticker")["price"].diff()
-
 df["return"] = df.groupby("ticker")["price"].pct_change()
-
 df["next_price"] = df.groupby("ticker")["price"].shift(-1)
-
 df['log_return'] = np.log(df["price"]/ df.groupby("ticker")["price"].shift(1))
 
 df.sort_values(["ticker", "date"])
@@ -48,19 +52,16 @@ df = df.sort_values(["ticker", "date"]).reset_index(drop = True)
 df = df.set_index(["ticker", "date"]).sort_index()
 
 aapl_slice = df.loc[  ( "AAPL", slice("2024-01-20", "2024-01-10") ), :  ]
-
-
 df = df.reset_index()
 
 df = df.set_index(["ticker", "date"])
 df = df.sort_values(["ticker", "date"]).reset_index()
-print(df)
-print("--------------------\n")
-
 
 rets = df.groupby("ticker")["price"].pct_change()
 vol = rets.groupby(df["ticker"]).std()
 
+top_ticker = vol.idxmax()
+top_vol = vol.loc[top_ticker]
 
 sum_table = df.groupby("ticker").agg(
     mean_price = ("price", "mean"),
@@ -70,18 +71,47 @@ sum_table = df.groupby("ticker").agg(
 
 df["ticker_mean_price"] = df.groupby("ticker")["price"].transform("mean")
 df["above_mean"] = df["price"] > df["ticker_mean_price"]
-
 rets = df.groupby("ticker")["price"].pct_change()
-
 vol = df.groupby("ticker")["price"].pct_change().std()
 
-print(vol)
+df["rolling_5_mean"] = (
+                df.groupby("ticker")["price"]
+                .rolling(5)
+                .mean()
+                .reset_index(level=0, drop=True)
+        )
+# Valid alternative using transform is:
+df["rolling_mean_5"] = (
+    df.groupby("ticker")["price"]
+        .transform(lambda x: x.rolling(5).mean())
+)
 
-top_ticker = vol.idxmax()
-top_vol = vol.loc[top_ticker]
 
-print(f"{top_ticker}: {top_vol:.4f}")
+df["rolling_10_vol"] = (
+    df.groupby("ticker")["return"]
+    .rolling(10)
+    .std()
+    .reset_index(level=0, drop=True)
+)   
+
+#print(df[["price_diff", "return", "next_price", "rolling_5_mean", "rolling_10_vol"]].isna().sum())
+df_model = df.copy().dropna(subset=["return","rolling_10_vol"])
+df["price_diff"] = df["price_diff"].fillna(0)
+assert df_model[["return", "rolling_10_vol"]].isna().sum().sum() == 0
+
+merged = df.merge(df_for_merging, left_on=["ticker","date"], right_on=["ticker", "earnings_date"], how="left")
+merged = merged.sort_values(["ticker","date"])
+
+merged.to_csv("merged.csv", index = False)
+
+
+
+
+
+
 print("--------------------")
+df.to_csv("df.csv", index=False)
+df_for_merging.to_csv("df_for_merging.csv", index=False)
 print("Done.")
 
 
