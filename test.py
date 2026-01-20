@@ -1,11 +1,9 @@
+import pandas as pd
 
-print("test.py: start executing")
+df = pd.DataFrame({
+    "A":["2","3",4],
+    "B": [4,6,8]
+})
 
-def greet(name):
-    print(f"Hello {name}")
-
-if __name__ == "__main__":
-    print("test.py: function greet is defined")
-    greet("Michael")
-
-print("test.py: end executing")
+df = df.rename(columns= {"A":"AAA", "B":"BBB"})
+print(df.head())

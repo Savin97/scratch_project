@@ -45,7 +45,7 @@ df["next_price"] = df.groupby("ticker")["price"].shift(-1)
 df['log_return'] = np.log(df["price"]/ df.groupby("ticker")["price"].shift(1))
 
 df.sort_values(["ticker", "date"])
-#df.to_csv("pandas2.csv", index=False)
+#df.to_csv("output/pandas2.csv", index=False)
 
 df["date"] = pd.to_datetime( df["date"] )
 df = df.sort_values(["ticker", "date"]).reset_index(drop = True)
@@ -102,16 +102,53 @@ assert df_model[["return", "rolling_10_vol"]].isna().sum().sum() == 0
 merged = df.merge(df_for_merging, left_on=["ticker","date"], right_on=["ticker", "earnings_date"], how="left")
 merged = merged.sort_values(["ticker","date"])
 
-merged.to_csv("merged.csv", index = False)
+merged.to_csv("output/merged.csv", index = False)
+
+earnings = pd.DataFrame({
+    "ticker": ["AAPL", "MSFT", "GOOGL", "AMZN"],
+    "earnings_date": pd.to_datetime(["2024-01-15", "2024-01-18", "2024-01-22", "2024-01-25"]),
+    "eps_est": [2.1, 1.9, 1.2, 0.8],
+})
+merged2 = df.merge(earnings, on="ticker", how="left", validate="many_to_one")
+assert df.shape[0] == merged2.shape[0]
+
+merged2["days_to_earnings"] = (merged2["earnings_date"] - merged2["date"]).dt.days
+
+
+
+sector_map = {"AAPL": "tech", "MSFT": "tech", "GOOGL": "tech", "AMZN": "consumer"}
+
+merged2["sector"] = merged2["ticker"].map(sector_map)
+
+
+
+merged2 = merged2.drop(columns=["dollar_volume","price_diff","market"])
+
+
+merged2["abs_days"] = merged2["days_to_earnings"].abs()
+sector_map = {"AAPL": "tech", "MSFT": "tech", "GOOGL": "tech", "AMZN": "consumer"}
+merged2["sector"] = merged2["ticker"].map(sector_map)
+def label_days(d):
+    if d <0:
+        return "after"
+    if d<=3:
+        return "imminent"
+    if d<=10:
+        return "soon"
+    return "far"
+merged2["earnings_bucket"] = merged2["days_to_earnings"].apply(label_days)
+
+value_counts = merged2["earnings_bucket"].value_counts()
+print("\n--------------------\n")
+
+print(value_counts)
 
 
 
 
 
-
+#print(merged2.head())
 print("--------------------")
-df.to_csv("df.csv", index=False)
-df_for_merging.to_csv("df_for_merging.csv", index=False)
+df.to_csv("output/df.csv", index=False)
+df_for_merging.to_csv("output/df_for_merging.csv", index=False)
 print("Done.")
-
-
