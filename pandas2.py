@@ -136,19 +136,68 @@ def label_days(d):
     if d<=10:
         return "soon"
     return "far"
+
 merged2["earnings_bucket"] = merged2["days_to_earnings"].apply(label_days)
-
 value_counts = merged2["earnings_bucket"].value_counts()
-print("\n--------------------\n")
+merged2.to_csv("output/merged2.csv", index=False)
+re_csv = pd.read_csv("output/merged2.csv")
+re_csv["date"] = pd.to_datetime(re_csv['date'], errors = "coerce")
+re_csv["earnings_date"] = pd.to_datetime(re_csv['earnings_date'], errors = "coerce")
+merged2.to_parquet("output/merged2.parquet", index=False)
+re_parq = pd.read_parquet("output/merged2.parquet")
+# print(merged2.dtypes)
+# print(re_csv.dtypes)
+# print(re_parq.dtypes)
+# print( (re_parq["price"] - merged2["price"]).abs().max() == 0 )
 
-print(value_counts)
+# Column existence
+assert {"ticker", "date", "price", "earnings_date", "days_to_earnings"}.issubset(merged2.columns)
+
+# Datatypes
+assert pd.api.types.is_datetime64_any_dtype(merged2[ "date"])
+assert pd.api.types.is_datetime64_any_dtype(merged2["earnings_date"])
+assert pd.api.types.is_numeric_dtype(merged2["price"])
+
+# Sorting/time intergrity 
+assert merged2.groupby("ticker")["date"].is_monotonic_increasing.all()
+assert not merged2.duplicated(subset=["ticker", "date"]).any()
+
+# Merge sanity
+assert merged2.shape[0] == df.shape[0]
+
+# Range sanity
+assert (merged2["price"] > 0).all()
+assert (merged2["volume"] >= 0).all()
 
 
+
+merged2= merged2.sort_values(["ticker", "date"])
+merged2["ret_1d"] = merged2.groupby("ticker")["price"].pct_change()
+merged2["ret_3d"] = (merged2["price"]/merged2.groupby("ticker")["price"].shift(3)) - 1
+merged2["vol_10d"] = merged2.groupby("ticker")["ret_1d"].rolling(10).std().reset_index(level=0, drop=True)
+vol_median = merged2.groupby("ticker")["vol_10d"].transform("median")
+
+hot_mask = ( (merged2["days_to_earnings"].abs() <= 3) & (merged2["vol_10d"] > vol_median) )
+
+merged2["risk_bucket"] = np.where(hot_mask, "Hot", "Normal")
+sum_table = merged2.assign(is_hot =merged2["risk_bucket"]=="Hot" ).groupby("ticker").agg(
+    vol_mean = ("vol_10d", "mean"),
+    hot_percentage = ("is_hot", "mean"),
+    row_count = ("price", "size")
+)
+sum_table = sum_table.reset_index()
+
+hot = (merged2["days_to_earnings"] <= 3) & (merged2["vol_10d"] > merged2.groupby("ticker")["vol_10d"].transform("median"))
+merged2["risk_bucket"] = np.where(hot, "hot", "normal")
+
+print(merged2.groupby("ticker")["vol_10d"].median())
+print("--------------------")
+
+print(merged2.groupby("ticker")["vol_10d"].transform("median"))
 
 
 
 #print(merged2.head())
 print("--------------------")
-df.to_csv("output/df.csv", index=False)
-df_for_merging.to_csv("output/df_for_merging.csv", index=False)
 print("Done.")
+
